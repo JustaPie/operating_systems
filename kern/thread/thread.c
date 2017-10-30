@@ -50,6 +50,10 @@
 #include <addrspace.h>
 #include <mainbus.h>
 #include <vnode.h>
+#include <pid.h>
+#include <kern/signal.h>
+#include <kern/wait.h>
+#include <kern/sysexits.h>
 
 
 /* Magic number used as a guard value on kernel thread stacks. */
@@ -58,6 +62,7 @@
 /* Wait channel. A wchan is protected by an associated, passed-in spinlock. */
 struct wchan {
 	const char *wc_name;		/* name for this channel */
+	struct spinlock wc_lock;	//mutex lock
 	struct threadlist wc_threads;	/* list of waiting threads */
 };
 
@@ -560,6 +565,13 @@ thread_fork(const char *name,
  * WC, protected by the spinlock LK. Otherwise WC and Lk should be
  * NULL.
  */
+
+//begin ks13r
+int thread_join(pid_t pid, int* status, int flags){
+	return pid_join(pid, status, flags);
+}
+//end ks13r
+
 static
 void
 thread_switch(threadstate_t newstate, struct wchan *wc, struct spinlock *lk)
@@ -952,6 +964,45 @@ thread_consider_migration(void)
 
 	KASSERT(threadlist_isempty(&victims));
 	threadlist_cleanup(&victims);
+}
+
+//ks13r
+void
+thread_sleep(const void *addr)
+{
+	// may not sleep in an interrupt handler
+	assert(in_interrupt==0);
+	
+	curthread->t_sleepaddr = addr;
+	mi_switch(S_SLEEP);
+	curthread->t_sleepaddr = NULL;
+}
+void
+thread_wakeup(const void *addr)
+{
+	int i, result;
+	
+	// meant to be called with interrupts off
+	assert(curspl>0);
+		
+	for (i=0; i<array_getnum(sleepers); i++) {
+		struct thread *t = array_getguy(sleepers, i);
+		if (t->t_sleepaddr == addr) {
+			
+			// Remove from list
+			array_remove(sleepers, i);
+			
+			// must look at the same sleepers[i] again
+			i--;
+
+			/*
+			 * Because we preallocate during thread_fork,
+			 * this should never fail.
+			 */
+			result = make_runnable(t);
+			assert(result==0);
+		}
+	}
 }
 
 ////////////////////////////////////////////////////////////

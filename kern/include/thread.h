@@ -73,7 +73,7 @@ struct thread {
 	char *t_name;			/* Name of this thread */
 	const char *t_wchan_name;	/* Name of wait channel, if sleeping */
 	threadstate_t t_state;		/* State this thread is in */
-
+	volatile int t_signal;
 	/*
 	 * Thread subsystem internal fields.
 	 */
@@ -83,6 +83,7 @@ struct thread {
 	struct switchframe *t_context;	/* Saved register context (on stack) */
 	struct cpu *t_cpu;		/* CPU thread runs on */
 	struct proc *t_proc;		/* Process thread belongs to */
+	
 
 	/*
 	 * Interrupt state fields.
@@ -105,10 +106,12 @@ struct thread {
 	 * Public fields
 	 */
 
+	
 	/* VFS */
 	bool t_did_reserve_buffers;	/* reserve_buffers() in effect */
 
 	/* add more here as needed */
+	pid_t t_pid;			//pid of this thread
 };
 
 /*
@@ -147,6 +150,7 @@ int thread_fork(const char *name, struct proc *proc,
                 void (*func)(void *, unsigned long),
                 void *data1, unsigned long data2);
 
+
 /*
  * Cause the current thread to exit.
  * Interrupts need not be disabled.
@@ -173,3 +177,6 @@ void thread_consider_migration(void);
 
 
 #endif /* _THREAD_H_ */
+
+void thread_sleep(const void *addr);
+void thread_wakeup(const void *addr);
